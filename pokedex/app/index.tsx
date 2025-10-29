@@ -67,7 +67,7 @@ export default function Index() {
      {pokemons.map((pokemon) => (
       <View key={pokemon.name} style={styles.linkWrapper}>
       <Link
-       href={"/details"}
+       href={{pathname: "/details", params:{name: pokemon.name}}}
        >
       <View
       style={{

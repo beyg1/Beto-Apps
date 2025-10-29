@@ -29,6 +29,4 @@ npx create-expo-app@latest pokedex
 
 5. Make another screen details.tsx
 
-   it should be opened when user taps a pokemon card and show the details which we want it to show.   
-
-  
+   it should be opened when user taps a pokemon card and show several details.   
