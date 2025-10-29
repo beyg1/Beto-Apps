@@ -49,7 +49,7 @@ export default function Index() {
           const data = await response.json();
           return {
             name: data.name,
-            image: data.sprites.front_default,
+            image: data.sprites.other['official-artwork'].front_default || data.sprites.front_default,
             types: data.types.map((type: any) => type.type.name)
           };
         })
