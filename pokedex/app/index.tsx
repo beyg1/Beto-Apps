@@ -99,7 +99,7 @@ export default function Index() {
   async function fetchPokemons() {
     try{
       // Step 1: Fetch basic Pokemon list from PokeAPI (limiting to first 10 for performance)
-      const response = await fetch("https://pokeapi.co/api/v2/pokemon/?limit=10");
+      const response = await fetch("https://pokeapi.co/api/v2/pokemon/?limit=100");
       const data = await response.json();
       
       // Step 2: For each Pokemon, fetch detailed information in parallel
