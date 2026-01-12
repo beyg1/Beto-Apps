@@ -4,11 +4,13 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,13 +22,10 @@ import Animated, {
   FadeIn,
   FadeInDown,
   FadeInUp,
-  SlideInRight,
   ZoomIn,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
-  withSequence,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
@@ -154,27 +153,18 @@ const statIcons: Record<string, string> = {
 };
 
 // ============================================================================
-// FLOATING IMAGE COMPONENT
+// HERO IMAGE COMPONENT (entrance animation only, no continuous animation)
 // ============================================================================
 
-function FloatingHeroImage({ uri }: { uri: string }) {
-  const translateY = useSharedValue(0);
+function HeroImage({ uri }: { uri: string }) {
   const scale = useSharedValue(0);
 
   useEffect(() => {
     scale.value = withSpring(1, { damping: 12, stiffness: 100 });
-    translateY.value = withRepeat(
-      withSequence(
-        withTiming(-12, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      true
-    );
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+    transform: [{ scale: scale.value }],
   }));
 
   return (
@@ -185,27 +175,33 @@ function FloatingHeroImage({ uri }: { uri: string }) {
 }
 
 // ============================================================================
-// ANIMATED STAT BAR COMPONENT
+// ANIMATED STAT BAR COMPONENT (triggers on visibility)
 // ============================================================================
 
 interface StatBarProps {
   stat: PokemonStat;
   index: number;
   maxStat: number;
+  isVisible: boolean;
 }
 
-function AnimatedStatBar({ stat, index, maxStat }: StatBarProps) {
+function AnimatedStatBar({ stat, index, maxStat, isVisible }: StatBarProps) {
   const progress = useSharedValue(0);
+  const hasAnimated = useSharedValue(false);
 
   useEffect(() => {
-    progress.value = withDelay(
-      index * 120 + 400,
-      withTiming(stat.base_stat / maxStat, {
-        duration: 900,
-        easing: Easing.out(Easing.cubic),
-      })
-    );
-  }, [stat.base_stat, maxStat]);
+    // Only animate once when becoming visible
+    if (isVisible && !hasAnimated.value) {
+      hasAnimated.value = true;
+      progress.value = withDelay(
+        index * 100 + 1000, // Added 1s delay
+        withTiming(stat.base_stat / maxStat, {
+          duration: 800,
+          easing: Easing.out(Easing.cubic),
+        })
+      );
+    }
+  }, [isVisible, stat.base_stat, maxStat]);
 
   const animatedBarStyle = useAnimatedStyle(() => ({
     width: `${progress.value * 100}%`,
@@ -220,12 +216,7 @@ function AnimatedStatBar({ stat, index, maxStat }: StatBarProps) {
   };
 
   return (
-    <Animated.View
-      entering={SlideInRight.delay(index * 80 + 300)
-        .duration(400)
-        .springify()}
-      style={styles.statItem}
-    >
+    <View style={styles.statItem}>
       <View style={styles.statHeader}>
         <Text style={styles.statIcon}>{statIcons[stat.stat.name] || "📊"}</Text>
         <Text style={styles.statName}>
@@ -246,7 +237,7 @@ function AnimatedStatBar({ stat, index, maxStat }: StatBarProps) {
           ]}
         />
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -261,6 +252,29 @@ export default function Details() {
   const [species, setSpecies] = useState<PokemonSpecies | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statsVisible, setStatsVisible] = useState(false);
+
+  // Refs for scroll-based visibility detection
+  const statsYPosition = useRef<number>(0);
+  const screenHeight = Dimensions.get("window").height;
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (statsVisible) return; // Already visible, no need to check
+
+      const scrollY = event.nativeEvent.contentOffset.y;
+      const viewportBottom = scrollY + screenHeight;
+
+      // Trigger animation when stats section enters viewport
+      if (
+        statsYPosition.current > 0 &&
+        viewportBottom > statsYPosition.current + 100
+      ) {
+        setStatsVisible(true);
+      }
+    },
+    [statsVisible, screenHeight]
+  );
 
   useEffect(() => {
     if (params.name) {
@@ -392,6 +406,8 @@ export default function Details() {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
         bounces={true}
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
       >
         {/* Hero Section */}
         <View style={styles.heroSection}>
@@ -447,7 +463,7 @@ export default function Details() {
 
           {/* Main Pokemon Image */}
           <View style={styles.imageContainer}>
-            <FloatingHeroImage
+            <HeroImage
               uri={
                 pokemon.sprites.other["official-artwork"].front_default ||
                 pokemon.sprites.front_default ||
@@ -537,7 +553,13 @@ export default function Details() {
           </View>
 
           {/* Base Stats */}
-          <View style={styles.section}>
+          <View
+            style={styles.section}
+            onLayout={(event) => {
+              const layout = event.nativeEvent.layout;
+              statsYPosition.current = layout.y;
+            }}
+          >
             <View style={styles.statsTitleRow}>
               <Text style={styles.sectionTitle}>Base Stats</Text>
               <View style={styles.totalStatsBadge}>
@@ -552,6 +574,7 @@ export default function Details() {
                 stat={stat}
                 index={index}
                 maxStat={getMaxStat()}
+                isVisible={statsVisible}
               />
             ))}
           </View>
