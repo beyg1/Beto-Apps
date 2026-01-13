@@ -2,9 +2,10 @@
 // IMPORTS
 // ============================================================================
 
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link } from "expo-router";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -17,9 +18,11 @@ import {
 } from "react-native";
 import Animated, {
   FadeInDown,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 const { width } = Dimensions.get("window");
@@ -160,6 +163,8 @@ export default function Index() {
   const [allPokemons, setAllPokemons] = useState<Pokemon[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const flatListRef = useRef<FlatList>(null);
+  const listOpacity = useSharedValue(1);
 
   const totalPages = Math.ceil(allPokemons.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -200,16 +205,37 @@ export default function Index() {
     }
   }
 
-  const goToNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
+  // Transition Logic
+  const changePage = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    // 1. Start transition: Fade out
+    listOpacity.value = withTiming(0, { duration: 250 }, (finished) => {
+      if (finished) {
+        runOnJS(setCurrentPage)(newPage);
+      }
+    });
+  };
+
+  // 2. React to page change (data update)
+  useEffect(() => {
+    if (listOpacity.value === 0) {
+      // We are in the middle of a transition
+      // Scroll to top INSTANTLY while invisible
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+
+      // Small delay to ensure layout settles, then Fade In
+      setTimeout(() => {
+        listOpacity.value = withTiming(1, { duration: 300 });
+      }, 50);
     }
+  }, [currentPokemons]); // Trigger when data updates
+
+  const goToNextPage = () => {
+    changePage(currentPage + 1);
   };
 
   const goToPrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
+    changePage(currentPage - 1);
   };
 
   const renderItem = useCallback(
@@ -229,51 +255,75 @@ export default function Index() {
     </View>
   );
 
-  const ListFooter = () => (
-    <View style={styles.paginationContainer}>
-      <Pressable
-        style={[
-          styles.pageButton,
-          currentPage === 1 && styles.pageButtonDisabled,
-        ]}
-        onPress={goToPrevPage}
-        disabled={currentPage === 1}
-      >
-        <Text
-          style={[
-            styles.pageButtonText,
-            currentPage === 1 && styles.pageButtonTextDisabled,
+  const ListFooter = () => <View style={styles.footerSpacer} />;
+
+  const PaginationDeck = () => (
+    <View style={styles.cyberDeckContainer}>
+      {/* Neon Top Border */}
+      <LinearGradient
+        colors={["transparent", "#00F0FF", "transparent"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.neonBorder}
+      />
+
+      <View style={styles.deckContent}>
+        <Pressable
+          onPress={goToPrevPage}
+          disabled={currentPage === 1}
+          style={({ pressed }) => [
+            styles.cyberButton,
+            pressed && styles.cyberButtonPressed,
+            currentPage === 1 && styles.cyberButtonDisabled,
           ]}
         >
-          ← Previous
-        </Text>
-      </Pressable>
+          <Ionicons
+            name="caret-back"
+            size={20}
+            color={currentPage === 1 ? "rgba(0, 240, 255, 0.2)" : "#00F0FF"}
+          />
+        </Pressable>
 
-      <View style={styles.pageInfo}>
-        <Text style={styles.pageNumber}>{currentPage}</Text>
-        <Text style={styles.pageDivider}>of</Text>
-        <Text style={styles.pageNumber}>{totalPages}</Text>
+        <View style={styles.cyberDisplay}>
+          <Text style={styles.cyberLabel}>SYSTEM_PAGE</Text>
+          <Text style={styles.cyberValue}>
+            {currentPage.toString().padStart(2, "0")}{" "}
+            <Text style={styles.cyberDivider}>/</Text> {totalPages}
+          </Text>
+          <View style={styles.cyberProgressContainer}>
+            <View
+              style={[
+                styles.cyberProgressBar,
+                { width: `${(currentPage / totalPages) * 100}%` },
+              ]}
+            />
+          </View>
+        </View>
+
+        <Pressable
+          onPress={goToNextPage}
+          disabled={currentPage === totalPages}
+          style={({ pressed }) => [
+            styles.cyberButton,
+            pressed && styles.cyberButtonPressed,
+            currentPage === totalPages && styles.cyberButtonDisabled,
+          ]}
+        >
+          <Ionicons
+            name="caret-forward"
+            size={20}
+            color={
+              currentPage === totalPages ? "rgba(0, 240, 255, 0.2)" : "#00F0FF"
+            }
+          />
+        </Pressable>
       </View>
-
-      <Pressable
-        style={[
-          styles.pageButton,
-          currentPage === totalPages && styles.pageButtonDisabled,
-        ]}
-        onPress={goToNextPage}
-        disabled={currentPage === totalPages}
-      >
-        <Text
-          style={[
-            styles.pageButtonText,
-            currentPage === totalPages && styles.pageButtonTextDisabled,
-          ]}
-        >
-          Next →
-        </Text>
-      </Pressable>
     </View>
   );
+
+  const listAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: listOpacity.value,
+  }));
 
   // ============================================================================
   // UI RENDERING
@@ -295,7 +345,8 @@ export default function Index() {
           <Text style={styles.loadingText}>Loading Pokémon...</Text>
         </View>
       ) : (
-        <FlatList
+        <Animated.FlatList
+          ref={flatListRef}
           data={currentPokemons}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
@@ -304,8 +355,10 @@ export default function Index() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={true}
+          style={listAnimatedStyle}
         />
       )}
+      <PaginationDeck />
     </View>
   );
 }
@@ -482,51 +535,107 @@ const styles = StyleSheet.create({
   },
 
   // Pagination
-  paginationContainer: {
+  // Pagination - Cyberpunk Deck
+  footerSpacer: {
+    height: 100, // Space for the absolute deck
+  },
+
+  cyberDeckContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 90,
+    backgroundColor: "rgba(10, 10, 16, 0.95)",
+    justifyContent: "center",
+    paddingBottom: 20, // Safe area ish
+  },
+
+  neonBorder: {
+    height: 2,
+    width: "100%",
+    position: "absolute",
+    top: 0,
+    shadowColor: "#00F0FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+
+  deckContent: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 30,
+    paddingTop: 10,
+  },
+
+  cyberButton: {
+    width: 50,
+    height: 50,
+    backgroundColor: "rgba(0, 240, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 240, 255, 0.3)",
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 20,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
+    transform: [{ skewX: "-10deg" }], // Cyberpunk angular look
   },
 
-  pageButton: {
-    backgroundColor: "#7C4DFF",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
+  cyberButtonPressed: {
+    backgroundColor: "rgba(0, 240, 255, 0.2)",
+    borderColor: "#00F0FF",
   },
 
-  pageButtonDisabled: {
-    backgroundColor: "rgba(255,255,255,0.1)",
+  cyberButtonDisabled: {
+    borderColor: "rgba(255, 255, 255, 0.05)",
+    backgroundColor: "transparent",
   },
 
-  pageButtonText: {
-    color: "#fff",
-    fontSize: 14,
+  cyberDisplay: {
+    alignItems: "center",
+    width: 140,
+  },
+
+  cyberLabel: {
+    color: "rgba(0, 240, 255, 0.5)",
+    fontSize: 10,
     fontWeight: "700",
+    letterSpacing: 2,
+    marginBottom: 4,
   },
 
-  pageButtonTextDisabled: {
-    color: "rgba(255,255,255,0.3)",
-  },
-
-  pageInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  pageNumber: {
+  cyberValue: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: 1,
+    fontVariant: ["tabular-nums"],
+    textShadowColor: "rgba(0, 240, 255, 0.5)",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
 
-  pageDivider: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 14,
+  cyberDivider: {
+    color: "rgba(255, 255, 255, 0.2)",
+    fontSize: 18,
+  },
+
+  cyberProgressContainer: {
+    width: "100%",
+    height: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    marginTop: 8,
+    borderRadius: 1,
+    overflow: "hidden",
+  },
+
+  cyberProgressBar: {
+    height: "100%",
+    backgroundColor: "#00F0FF",
+    shadowColor: "#00F0FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
   },
 });
