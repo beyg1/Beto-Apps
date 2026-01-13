@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import Animated, {
   FadeInDown,
+  SharedValue,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -27,6 +28,23 @@ import Animated, {
 
 const { width } = Dimensions.get("window");
 const ITEMS_PER_PAGE = 10;
+
+// ============================================================================
+// ITEM WRAPPER
+// ============================================================================
+
+const ItemWrapper = ({
+  children,
+  opacity,
+}: {
+  children: React.ReactNode;
+  opacity: SharedValue<number>;
+}) => {
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
+  return <Animated.View style={style}>{children}</Animated.View>;
+};
 
 // ============================================================================
 // INTERFACES
@@ -240,7 +258,9 @@ export default function Index() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: Pokemon; index: number }) => (
-      <PokemonCard pokemon={item} index={index} />
+      <ItemWrapper opacity={listOpacity}>
+        <PokemonCard pokemon={item} index={index} />
+      </ItemWrapper>
     ),
     []
   );
@@ -255,7 +275,7 @@ export default function Index() {
     </View>
   );
 
-  const ListFooter = () => <View style={styles.footerSpacer} />;
+  const ListFooter = () => <PaginationDeck />;
 
   const PaginationDeck = () => (
     <View style={styles.cyberDeckContainer}>
@@ -285,7 +305,7 @@ export default function Index() {
         </Pressable>
 
         <View style={styles.cyberDisplay}>
-          <Text style={styles.cyberLabel}>SYSTEM_PAGE</Text>
+          <Text style={styles.cyberLabel}>PAGES</Text>
           <Text style={styles.cyberValue}>
             {currentPage.toString().padStart(2, "0")}{" "}
             <Text style={styles.cyberDivider}>/</Text> {totalPages}
@@ -345,7 +365,7 @@ export default function Index() {
           <Text style={styles.loadingText}>Loading Pokémon...</Text>
         </View>
       ) : (
-        <Animated.FlatList
+        <FlatList
           ref={flatListRef}
           data={currentPokemons}
           renderItem={renderItem}
@@ -355,10 +375,8 @@ export default function Index() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={true}
-          style={listAnimatedStyle}
         />
       )}
-      <PaginationDeck />
     </View>
   );
 }
@@ -536,19 +554,16 @@ const styles = StyleSheet.create({
 
   // Pagination
   // Pagination - Cyberpunk Deck
-  footerSpacer: {
-    height: 100, // Space for the absolute deck
-  },
-
   cyberDeckContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 90,
+    marginTop: 40,
     backgroundColor: "rgba(10, 10, 16, 0.95)",
     justifyContent: "center",
-    paddingBottom: 20, // Safe area ish
+    marginHorizontal: -20,
+    marginBottom: -30,
+    paddingBottom: 20,
+    height: 110,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
 
   neonBorder: {

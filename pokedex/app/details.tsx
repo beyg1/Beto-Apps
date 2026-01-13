@@ -194,7 +194,7 @@ function AnimatedStatBar({ stat, index, maxStat, isVisible }: StatBarProps) {
     if (isVisible && !hasAnimated.value) {
       hasAnimated.value = true;
       progress.value = withDelay(
-        index * 100 + 1000, // Added 1s delay
+        index * 100, // Removed extra 1s delay, only stagger remains
         withTiming(stat.base_stat / maxStat, {
           duration: 800,
           easing: Easing.out(Easing.cubic),
@@ -256,6 +256,7 @@ export default function Details() {
 
   // Refs for scroll-based visibility detection
   const statsYPosition = useRef<number>(0);
+  const contentCardYPosition = useRef<number>(0);
   const screenHeight = Dimensions.get("window").height;
 
   const handleScroll = useCallback(
@@ -266,10 +267,9 @@ export default function Details() {
       const viewportBottom = scrollY + screenHeight;
 
       // Trigger animation when stats section enters viewport
-      if (
-        statsYPosition.current > 0 &&
-        viewportBottom > statsYPosition.current + 100
-      ) {
+      const absoluteStatsY =
+        statsYPosition.current + contentCardYPosition.current;
+      if (absoluteStatsY > 0 && viewportBottom > absoluteStatsY + 200) {
         setStatsVisible(true);
       }
     },
@@ -477,6 +477,9 @@ export default function Details() {
         <Animated.View
           entering={FadeInUp.delay(200).duration(600)}
           style={styles.contentCard}
+          onLayout={(event) => {
+            contentCardYPosition.current = event.nativeEvent.layout.y;
+          }}
         >
           {/* Description */}
           {getFlavorText() && (
