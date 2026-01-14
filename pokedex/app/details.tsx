@@ -187,24 +187,39 @@ interface StatBarProps {
 
 function AnimatedStatBar({ stat, index, maxStat, isVisible }: StatBarProps) {
   const progress = useSharedValue(0);
+  const textOpacity = useSharedValue(0);
   const hasAnimated = useSharedValue(false);
 
   useEffect(() => {
     // Only animate once when becoming visible
     if (isVisible && !hasAnimated.value) {
       hasAnimated.value = true;
+      const staggerDelay = index * 100;
+      const barDuration = 800;
+      const extraDelay = 400; // 0.4s delay as requested
+
       progress.value = withDelay(
-        index * 100, // Removed extra 1s delay, only stagger remains
+        staggerDelay,
         withTiming(stat.base_stat / maxStat, {
-          duration: 800,
+          duration: barDuration,
           easing: Easing.out(Easing.cubic),
         })
+      );
+
+      // Animate text opacity after bar animation completes + 0.4s delay
+      textOpacity.value = withDelay(
+        staggerDelay + barDuration + extraDelay,
+        withTiming(1, { duration: 300 })
       );
     }
   }, [isVisible, stat.base_stat, maxStat]);
 
   const animatedBarStyle = useAnimatedStyle(() => ({
     width: `${progress.value * 100}%`,
+  }));
+
+  const animatedTextStyle = useAnimatedStyle(() => ({
+    opacity: textOpacity.value,
   }));
 
   const getStatColor = (value: number) => {
@@ -222,11 +237,15 @@ function AnimatedStatBar({ stat, index, maxStat, isVisible }: StatBarProps) {
         <Text style={styles.statName}>
           {statNames[stat.stat.name] || stat.stat.name}
         </Text>
-        <Text
-          style={[styles.statValue, { color: getStatColor(stat.base_stat) }]}
+        <Animated.Text
+          style={[
+            styles.statValue,
+            { color: getStatColor(stat.base_stat) },
+            animatedTextStyle,
+          ]}
         >
           {stat.base_stat}
-        </Text>
+        </Animated.Text>
       </View>
       <View style={styles.statBarContainer}>
         <Animated.View
